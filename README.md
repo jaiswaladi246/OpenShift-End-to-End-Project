@@ -56,8 +56,8 @@ OpenShift Local needs 4 physical CPU cores, about 9 GB of free RAM and 35 GB of 
 This is the path we show first in the video.
 
 1. **Database:** *+Add → Container images*, image `quay.io/sclorg/postgresql-15-c9s:latest`, name `postgresql`, and add environment variables `POSTGRESQL_USER`, `POSTGRESQL_PASSWORD`, `POSTGRESQL_DATABASE` (better: from a Secret, see section 4).
-2. **Backend:** *+Add → Import from Git*, repo URL, *Show advanced Git options → Context dir* `/backend`, builder **Python**, name `backend`, untick *Create a route*. Add the `DB_*` environment variables.
-3. **Frontend:** *+Add → Import from Git*, same repo, context dir `/frontend`, builder **Nginx**, name `frontend`, keep *Create a route* ticked.
+2. **Backend:** *+Add → Import from Git*, repo URL, *Show advanced Git options → Context dir* `/backend`, builder **Python** (version 3.12-ubi9), name `backend`, untick *Create a route*. Add the `DB_*` environment variables.
+3. **Frontend:** *+Add → Import from Git*, same repo, context dir `/frontend`, builder **Nginx** (version 1.24-ubi9), name `frontend`, keep *Create a route* ticked.
 4. Open **Topology**, watch the builds run, then click the frontend's route icon.
 
 > **Private repo?** In step 2 choose *Source secret → Create new secret* and paste a GitHub personal access token with read access. OpenShift uses it to clone.

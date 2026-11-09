@@ -1,43 +1,206 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ShackBoard · DevOps Shack on OpenShift</title>
+  <title>DevOps Shack Command Center · on Red Hat OpenShift</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23FF4D00'/><text x='32' y='42' font-size='28' font-family='Arial' font-weight='700' fill='white' text-anchor='middle'>DS</text></svg>">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <header>
+  <canvas id="confetti"></canvas>
+  <div class="bg-glow"></div>
+
+  <header class="topbar">
     <div class="brand">
-      <span class="logo">DS</span>
+      <div class="logo">DS</div>
       <div>
-        <h1>ShackBoard</h1>
-        <p>A 3-tier app running on Red Hat OpenShift · DevOps Shack</p>
+        <div class="brand-name">DevOps Shack <span>Command Center</span></div>
+        <div class="brand-sub">3-tier app on Red Hat OpenShift · nginx → Python → PostgreSQL</div>
       </div>
     </div>
-    <div class="tiers">
-      <span class="tier">Frontend · nginx</span>
-      <span class="arrow">→</span>
-      <span class="tier">Backend · Python</span>
-      <span class="arrow">→</span>
-      <span class="tier">Database · PostgreSQL</span>
+    <nav class="tabs" id="tabs">
+      <button class="tab active" data-view="board">Sprint Board</button>
+      <button class="tab" data-view="dashboard">Dashboard</button>
+      <button class="tab" data-view="platform">Platform &amp; Chaos Lab</button>
+      <button class="tab" data-view="activity">Activity</button>
+    </nav>
+    <div class="top-actions">
+      <div class="live-pill" id="live-pill"><span class="dot"></span><span id="live-text">Connecting…</span></div>
+      <button class="icon-btn" id="theme-toggle" title="Toggle theme">◐</button>
     </div>
   </header>
 
   <main>
-    <form id="new-task">
-      <input id="title" maxlength="200" placeholder="Add a task, e.g. Set up a BuildConfig webhook" autocomplete="off" required>
-      <button type="submit">Add task</button>
-    </form>
+    <!-- KPI strip, visible on every view -->
+    <section class="kpis">
+      <div class="kpi"><div class="kpi-label">Total tasks</div><div class="kpi-value" data-count id="kpi-total">0</div></div>
+      <div class="kpi"><div class="kpi-label">In progress</div><div class="kpi-value" data-count id="kpi-doing">0</div></div>
+      <div class="kpi"><div class="kpi-label">Completed</div><div class="kpi-value" data-count id="kpi-done">0</div></div>
+      <div class="kpi"><div class="kpi-label">Sprint completion</div><div class="kpi-value"><span data-count id="kpi-completion">0</span>%</div>
+        <div class="progress"><div class="progress-bar" id="kpi-progress"></div></div></div>
+      <div class="kpi"><div class="kpi-label">Serving pod</div><div class="kpi-value small" id="kpi-pod">—</div></div>
+    </section>
 
-    <section class="board">
-      <div class="column" data-status="todo"><h2>To do <span class="count"></span></h2><ul></ul></div>
-      <div class="column" data-status="doing"><h2>In progress <span class="count"></span></h2><ul></ul></div>
-      <div class="column" data-status="done"><h2>Done <span class="count"></span></h2><ul></ul></div>
+    <!-- BOARD -->
+    <section class="view active" id="view-board">
+      <div class="toolbar">
+        <input id="search" placeholder="Search tasks, owners or tags…" autocomplete="off">
+        <select id="filter-priority">
+          <option value="">All priorities</option>
+          <option value="critical">Critical</option>
+          <option value="high">High</option>
+          <option value="medium">Medium</option>
+          <option value="low">Low</option>
+        </select>
+        <button class="btn primary" id="open-create">+ New task</button>
+      </div>
+      <div class="board" id="board">
+        <div class="column" data-status="todo"><div class="col-head"><span class="col-dot todo"></span>To do <span class="col-count"></span></div><div class="col-body"></div></div>
+        <div class="column" data-status="doing"><div class="col-head"><span class="col-dot doing"></span>In progress <span class="col-count"></span></div><div class="col-body"></div></div>
+        <div class="column" data-status="review"><div class="col-head"><span class="col-dot review"></span>In review <span class="col-count"></span></div><div class="col-body"></div></div>
+        <div class="column" data-status="done"><div class="col-head"><span class="col-dot done"></span>Done <span class="col-count"></span></div><div class="col-body"></div></div>
+      </div>
+      <p class="hint">Drag cards between columns. Click a priority badge to change it. Moving a card to Done celebrates 🎉</p>
+    </section>
+
+    <!-- DASHBOARD -->
+    <section class="view" id="view-dashboard">
+      <div class="grid-3">
+        <div class="card">
+          <h3>Tasks by status</h3>
+          <div class="donut-wrap">
+            <svg viewBox="0 0 120 120" class="donut" id="donut"></svg>
+            <div class="donut-center"><div class="donut-num" id="donut-num">0%</div><div class="donut-label">done</div></div>
+          </div>
+          <div class="legend" id="donut-legend"></div>
+        </div>
+        <div class="card">
+          <h3>Tasks by priority</h3>
+          <div class="bars" id="priority-bars"></div>
+        </div>
+        <div class="card">
+          <h3>Team workload</h3>
+          <div class="bars" id="assignee-bars"></div>
+        </div>
+      </div>
+      <div class="card wide">
+        <h3>What this demo shows</h3>
+        <div class="feature-grid">
+          <div class="feature"><b>Source-to-Image</b><span>OpenShift built both images straight from Git, no Dockerfile.</span></div>
+          <div class="feature"><b>Routes</b><span>This page is served on an HTTPS URL OpenShift created for us.</span></div>
+          <div class="feature"><b>Secrets</b><span>Database credentials come from a Secret, never from code.</span></div>
+          <div class="feature"><b>Probes</b><span>Readiness and liveness checks decide where traffic goes.</span></div>
+          <div class="feature"><b>Scaling</b><span>Several backend pods share the traffic. Watch the Platform tab.</span></div>
+          <div class="feature"><b>Self-healing</b><span>Crash a pod in the Chaos Lab and OpenShift brings it back.</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- PLATFORM & CHAOS -->
+    <section class="view" id="view-platform">
+      <div class="grid-2">
+        <div class="card pod-card">
+          <h3>Live platform status</h3>
+          <div class="pod-hero">
+            <div class="pulse-ring"><div class="pulse-core">◉</div></div>
+            <div>
+              <div class="muted">Request answered by pod</div>
+              <div class="pod-name" id="p-pod">—</div>
+            </div>
+          </div>
+          <div class="stat-grid">
+            <div><span class="muted">App version</span><b id="p-version">—</b></div>
+            <div><span class="muted">Environment</span><b id="p-env">—</b></div>
+            <div><span class="muted">Namespace</span><b id="p-ns">—</b></div>
+            <div><span class="muted">Node</span><b id="p-node">—</b></div>
+            <div><span class="muted">Pod uptime</span><b id="p-uptime">—</b></div>
+            <div><span class="muted">Python</span><b id="p-python">—</b></div>
+            <div><span class="muted">Database</span><b id="p-db">—</b></div>
+            <div><span class="muted">DB latency</span><b id="p-latency">—</b></div>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Traffic by pod <span class="muted small">(from this browser, every 2 s)</span></h3>
+          <div class="bars" id="traffic-bars"></div>
+          <div class="ticker" id="ticker"></div>
+        </div>
+      </div>
+
+      <div class="card chaos">
+        <div class="chaos-head">
+          <div>
+            <h3>⚡ Chaos Lab</h3>
+            <p class="muted">Break things on purpose and watch OpenShift react. Keep the Topology view open next to this page.</p>
+          </div>
+          <span class="badge" id="chaos-state">checking…</span>
+        </div>
+        <div class="chaos-grid">
+          <div class="chaos-item">
+            <div class="chaos-icon">🔥</div>
+            <b>CPU spike</b>
+            <span class="muted">Keeps one core busy for 60 s on whichever pod answers. Watch its CPU graph climb.</span>
+            <button class="btn" data-chaos="cpu?seconds=60">Start CPU load</button>
+          </div>
+          <div class="chaos-item">
+            <div class="chaos-icon">🚦</div>
+            <b>Fail readiness</b>
+            <span class="muted">The pod reports "not ready" for 45 s. OpenShift stops routing to it but keeps it running.</span>
+            <button class="btn" data-chaos="unready?seconds=45">Make a pod not ready</button>
+          </div>
+          <div class="chaos-item danger">
+            <div class="chaos-icon">💥</div>
+            <b>Crash a pod</b>
+            <span class="muted">Kills the container. OpenShift restarts it automatically and the restart count goes up.</span>
+            <button class="btn danger" data-chaos="crash">Crash a pod</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ACTIVITY -->
+    <section class="view" id="view-activity">
+      <div class="card wide">
+        <h3>Activity feed <span class="muted small">(every change, with the pod that handled it)</span></h3>
+        <ul class="timeline" id="timeline"></ul>
+      </div>
     </section>
   </main>
 
-  <footer id="info">Connecting to the backend…</footer>
+  <footer>
+    <div>Built by <b>DevOps Shack</b> for the OpenShift End-to-End Project</div>
+    <div class="footer-links">
+      <a href="https://www.youtube.com/@devopsshack" target="_blank" rel="noopener">YouTube</a>
+      <a href="https://devopsshack.com" target="_blank" rel="noopener">devopsshack.com</a>
+      <a class="cta" href="https://devopsshack.com" target="_blank" rel="noopener">Learn this live in Batch 16 →</a>
+    </div>
+  </footer>
+
+  <!-- Create task modal -->
+  <div class="modal-backdrop" id="modal">
+    <form class="modal" id="create-form">
+      <h3>New task</h3>
+      <label>Title<input name="title" maxlength="200" required placeholder="e.g. Configure a GitHub webhook"></label>
+      <div class="row">
+        <label>Priority
+          <select name="priority">
+            <option value="low">Low</option>
+            <option value="medium" selected>Medium</option>
+            <option value="high">High</option>
+            <option value="critical">Critical</option>
+          </select>
+        </label>
+        <label>Owner<input name="assignee" maxlength="40" placeholder="e.g. Aditya"></label>
+      </div>
+      <label>Tag<input name="tag" maxlength="30" placeholder="e.g. openshift, security, ci-cd"></label>
+      <div class="modal-actions">
+        <button type="button" class="btn ghost" id="close-create">Cancel</button>
+        <button type="submit" class="btn primary">Create task</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="toasts" id="toasts"></div>
   <script src="app.js"></script>
 </body>
 </html>

@@ -20,7 +20,7 @@ spec:
   strategy:
     type: Source
     sourceStrategy:
-      from: { kind: ImageStreamTag, namespace: openshift, name: "nginx:latest" }
+      from: { kind: ImageStreamTag, namespace: openshift, name: "nginx:1.24-ubi9" }
   output:
     to: { kind: ImageStreamTag, name: "frontend:latest" }
   triggers:
