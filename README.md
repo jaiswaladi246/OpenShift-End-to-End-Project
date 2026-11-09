@@ -107,6 +107,48 @@ unset GH_TOKEN
 
 For a public fork, delete the `sourceSecret` line from both BuildConfigs instead.
 
+
+### 4b. Deploy with `oc new-app` (no YAML)
+
+The same app built with imperative commands, the CLI twin of the console's *Container images* and *Import from Git* forms. Run it in the Web Terminal (`>_` icon). It assumes the `github-token` source secret already exists.
+
+```bash
+# Secrets whose key names match the variables each app reads
+DB_PASSWORD=$(openssl rand -hex 12)
+oc create secret generic postgresql-env --from-literal=POSTGRESQL_USER=shackboard \
+  --from-literal=POSTGRESQL_PASSWORD=$DB_PASSWORD --from-literal=POSTGRESQL_DATABASE=shackboard
+oc create secret generic backend-db --from-literal=DB_USER=shackboard \
+  --from-literal=DB_PASSWORD=$DB_PASSWORD --from-literal=DB_NAME=shackboard
+
+# Database: image + settings + Recreate strategy + 1Gi volume
+oc new-app quay.io/sclorg/postgresql-15-c9s:latest --name=postgresql -l app.kubernetes.io/part-of=shackboard
+oc set env deploy/postgresql --from=secret/postgresql-env
+oc patch deploy/postgresql -p '{"spec":{"strategy":{"type":"Recreate","rollingUpdate":null}}}'
+oc set volume deploy/postgresql --add --name=postgresql-data --type=pvc \
+  --claim-name=postgresql-data --claim-size=1Gi --mount-path=/var/lib/pgsql/data
+
+# Backend: S2I build from the private repo
+REPO=https://github.com/jaiswaladi246/openshift-end-to-end-project.git#main
+oc new-app python:3.12-ubi9~$REPO --context-dir=backend --source-secret=github-token \
+  --name=backend -l app.kubernetes.io/part-of=shackboard
+oc set env deploy/backend --from=secret/backend-db
+oc set env deploy/backend DB_HOST=postgresql APP_VERSION=v2 APP_ENV=dev CHAOS_ENABLED=true
+oc set probe deploy/backend --readiness --get-url=http://:8080/readyz --period-seconds=5
+oc set probe deploy/backend --liveness --get-url=http://:8080/healthz --initial-delay-seconds=20
+oc scale deploy/backend --replicas=2
+
+# Frontend + public HTTPS route
+oc new-app nginx:1.24-ubi9~$REPO --context-dir=frontend --source-secret=github-token \
+  --name=frontend -l app.kubernetes.io/part-of=shackboard
+oc create route edge shackboard --service=frontend --port=8080-tcp --insecure-policy=Redirect
+
+# Check
+oc rollout status deploy/backend && oc get pods -l app.kubernetes.io/part-of=shackboard
+curl -s https://$(oc get route shackboard -o jsonpath='{.spec.host}')/api/info; echo
+```
+
+Clean up this variant with `oc delete all -l app.kubernetes.io/part-of=shackboard && oc delete pvc postgresql-data`. Never run `oc delete all` without a label: the Web Terminal itself runs as a pod in your project.
+
 ---
 
 ## 5. The production moments to show
