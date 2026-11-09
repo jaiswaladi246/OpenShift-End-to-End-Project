@@ -14,9 +14,9 @@ metadata:
 spec:
   source:
     type: Git
-    git: { uri: https://github.com/jaiswaladi246/OpenShift-End-to-End-Project.git, ref: main }
+    git: { uri: https://github.com/jaiswaladi246/openshift-end-to-end-project.git, ref: main }
     contextDir: frontend
-    # sourceSecret: { name: github-token }
+    sourceSecret: { name: github-token }
   strategy:
     type: Source
     sourceStrategy:

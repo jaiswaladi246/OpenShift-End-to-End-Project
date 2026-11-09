@@ -14,10 +14,10 @@ metadata:
 spec:
   source:
     type: Git
-    git: { uri: https://github.com/jaiswaladi246/OpenShift-End-to-End-Project.git, ref: main }
+    git: { uri: https://github.com/jaiswaladi246/openshift-end-to-end-project.git, ref: main }
     contextDir: backend
-    # Private repo? Create a secret with a GitHub token and uncomment:
-    # sourceSecret: { name: github-token }
+    # Private repo: create the github-token source secret first (see README)
+    sourceSecret: { name: github-token }
   strategy:
     type: Source
     sourceStrategy:

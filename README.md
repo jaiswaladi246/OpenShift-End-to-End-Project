@@ -2,7 +2,12 @@
 
 We take a real 3-tier application and run it on **Red Hat OpenShift** the way companies do: OpenShift builds the images straight from Git, deploys them, connects the tiers, exposes the app on a secure URL, and rebuilds automatically when the code changes.
 
-**The app — ShackBoard**, a small team task board:
+**The app — DevOps Shack Command Center**, a team sprint board with a live platform view:
+
+- **Sprint Board:** drag-and-drop tasks across To do / In progress / Review / Done, priorities, search and filters
+- **Dashboard:** animated KPIs, status donut and priority bars, all from the database
+- **Platform & Chaos Lab:** which pod answered each request, traffic split across pods, plus buttons that burn CPU, fail the readiness probe or crash a pod, so you can watch OpenShift react
+- **Activity:** a timeline of every change
 
 | Tier | Technology | How OpenShift builds it |
 |---|---|---|
@@ -14,7 +19,9 @@ We take a real 3-tier application and run it on **Red Hat OpenShift** the way co
 Browser ──HTTPS──▶ Route ──▶ frontend (nginx) ──/api──▶ backend (Python, 2 pods) ──▶ postgresql (PVC)
 ```
 
-The footer of the page shows which backend pod answered. Scale the backend and watch it change.
+The Platform tab shows which backend pod answered each request. Scale the backend and watch the traffic spread.
+
+**Backend settings (environment variables):** `DB_HOST`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` (from the `shackboard-db` Secret), `APP_VERSION`, `APP_ENV`, `CHAOS_ENABLED` (`true` turns on the Chaos Lab; leave it off anywhere real), and `POD_NAMESPACE` / `NODE_NAME` from the downward API.
 
 ---
 
@@ -60,7 +67,7 @@ This is the path we show first in the video.
 3. **Frontend:** *+Add → Import from Git*, same repo, context dir `/frontend`, builder **Nginx** (version 1.24-ubi9), name `frontend`, keep *Create a route* ticked.
 4. Open **Topology**, watch the builds run, then click the frontend's route icon.
 
-> **Private repo?** In step 2 choose *Source secret → Create new secret* and paste a GitHub personal access token with read access. OpenShift uses it to clone.
+> **Private repo?** In step 2 choose *Source secret → Create new secret* and paste a GitHub **fine-grained token** limited to this one repository with **Contents: Read-only** (Metadata: Read-only is added automatically). OpenShift uses it only to clone.
 
 ---
 
@@ -69,8 +76,8 @@ This is the path we show first in the video.
 Use the **Web Terminal** (the `>_` icon at the top of the console) or install `oc` locally and copy the login command from *your name → Copy login command*.
 
 ```bash
-git clone https://github.com/jaiswaladi246/OpenShift-End-to-End-Project.git
-cd OpenShift-End-to-End-Project
+git clone https://github.com/jaiswaladi246/openshift-end-to-end-project.git
+cd openshift-end-to-end-project
 
 # 1) Database credentials as a Secret (never commit passwords)
 oc create secret generic shackboard-db \
@@ -89,13 +96,16 @@ oc get pods
 oc get route shackboard -o jsonpath='https://{.spec.host}{"\n"}'
 ```
 
-For a **private repo**, create the token secret before step 2 and uncomment `sourceSecret` in both BuildConfigs:
+This repo is **private**, so both BuildConfigs clone with the `github-token` source secret. Create it **before step 2** (or in the console: *Secrets → Create → Source secret*, Basic authentication). Type the token at the prompt so it never lands in your shell history:
 
 ```bash
+read -s -p "GitHub token: " GH_TOKEN; echo
 oc create secret generic github-token --type=kubernetes.io/basic-auth \
-  --from-literal=username=<github-user> --from-literal=password=<personal-access-token>
-oc secrets link builder github-token
+  --from-literal=username=<github-user> --from-literal=password="$GH_TOKEN"
+unset GH_TOKEN
 ```
+
+For a public fork, delete the `sourceSecret` line from both BuildConfigs instead.
 
 ---
 
@@ -109,6 +119,9 @@ oc secrets link builder github-token
 | **Rebuild on change** | Edit `APP_VERSION` or code, then `oc start-build backend --follow` | S2I builds a new image, the ImageStream updates and the Deployment rolls out automatically |
 | **Git push → deploy** | `oc describe bc/backend` shows the GitHub webhook URL; add it in the repo's *Settings → Webhooks* with the secret `backend-webhook` | Every push to GitHub triggers a build and deploy |
 | **Security by default** | `oc rsh deploy/backend id` | The container runs as a random UID, not root |
+| **Chaos: CPU spike** | Chaos Lab → *Burn CPU* | The pod's CPU graph climbs under *Observe*; other pods keep serving |
+| **Chaos: readiness** | Chaos Lab → *Fail readiness* | The pod stays Running but leaves the Service endpoints (`oc get endpoints backend`); traffic shifts to healthy pods, then it returns |
+| **Chaos: crash** | Chaos Lab → *Crash a pod* | The restart count goes up by one and the pod is back in seconds |
 | **Rollback** | `oc rollout undo deploy/backend` | Back to the previous version in one command |
 
 To create the webhook secret: `oc create secret generic backend-webhook --from-literal=WebHookSecretKey=$(openssl rand -hex 16)`.
