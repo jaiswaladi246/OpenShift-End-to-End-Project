@@ -1,0 +1,79 @@
+# Frontend: static UI served by nginx, built with the nginx S2I image.
+# nginx forwards /api/* to the backend Service (see frontend/nginx-default-cfg/api-proxy.conf).
+apiVersion: image.openshift.io/v1
+kind: ImageStream
+metadata:
+  name: frontend
+  labels: { app: shackboard, tier: frontend }
+---
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: frontend
+  labels: { app: shackboard, tier: frontend }
+spec:
+  source:
+    type: Git
+    git: { uri: https://github.com/jaiswaladi246/OpenShift-End-to-End-Project.git, ref: main }
+    contextDir: frontend
+    # sourceSecret: { name: github-token }
+  strategy:
+    type: Source
+    sourceStrategy:
+      from: { kind: ImageStreamTag, namespace: openshift, name: "nginx:latest" }
+  output:
+    to: { kind: ImageStreamTag, name: "frontend:latest" }
+  triggers:
+    - type: ConfigChange
+    - type: ImageChange
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  labels:
+    app: shackboard
+    tier: frontend
+    app.kubernetes.io/part-of: shackboard
+    app.openshift.io/runtime: nginx
+  annotations:
+    image.openshift.io/triggers: '[{"from":{"kind":"ImageStreamTag","name":"frontend:latest"},"fieldPath":"spec.template.spec.containers[?(@.name==\"frontend\")].image"}]'
+    app.openshift.io/connects-to: '[{"apiVersion":"apps/v1","kind":"Deployment","name":"backend"}]'
+spec:
+  replicas: 1
+  selector: { matchLabels: { name: frontend } }
+  template:
+    metadata: { labels: { name: frontend, app: shackboard, tier: frontend } }
+    spec:
+      containers:
+        - name: frontend
+          image: frontend:latest
+          ports: [{ containerPort: 8080 }]
+          readinessProbe:
+            httpGet: { path: /, port: 8080 }
+            periodSeconds: 5
+          resources:
+            requests: { cpu: 20m, memory: 32Mi }
+            limits: { memory: 128Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  labels: { app: shackboard, tier: frontend }
+spec:
+  selector: { name: frontend }
+  ports: [{ name: http, port: 8080, targetPort: 8080 }]
+---
+# A Route is OpenShift's built-in way to expose an app: a public HTTPS URL with no Ingress controller to install.
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: shackboard
+  labels: { app: shackboard, tier: frontend }
+spec:
+  to: { kind: Service, name: frontend }
+  port: { targetPort: http }
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect

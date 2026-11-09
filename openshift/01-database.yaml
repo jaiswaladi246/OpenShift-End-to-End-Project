@@ -1,0 +1,67 @@
+# PostgreSQL with persistent storage.
+# Create the secret first (never commit passwords):
+#   oc create secret generic shackboard-db \
+#     --from-literal=database-user=shackboard \
+#     --from-literal=database-password=$(openssl rand -hex 12) \
+#     --from-literal=database-name=shackboard
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgresql-data
+  labels: { app: shackboard, tier: database }
+spec:
+  accessModes: [ReadWriteOnce]
+  resources: { requests: { storage: 1Gi } }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgresql
+  labels:
+    app: shackboard
+    tier: database
+    app.kubernetes.io/part-of: shackboard
+    app.openshift.io/runtime: postgresql
+spec:
+  replicas: 1
+  strategy: { type: Recreate }
+  selector: { matchLabels: { name: postgresql } }
+  template:
+    metadata: { labels: { name: postgresql, app: shackboard, tier: database } }
+    spec:
+      containers:
+        - name: postgresql
+          # Red Hat's community PostgreSQL image: runs as a random non-root user, which OpenShift requires.
+          image: quay.io/sclorg/postgresql-15-c9s:latest
+          ports: [{ containerPort: 5432 }]
+          env:
+            - name: POSTGRESQL_USER
+              valueFrom: { secretKeyRef: { name: shackboard-db, key: database-user } }
+            - name: POSTGRESQL_PASSWORD
+              valueFrom: { secretKeyRef: { name: shackboard-db, key: database-password } }
+            - name: POSTGRESQL_DATABASE
+              valueFrom: { secretKeyRef: { name: shackboard-db, key: database-name } }
+          readinessProbe:
+            exec: { command: ["/usr/libexec/check-container"] }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            exec: { command: ["/usr/libexec/check-container", "--live"] }
+            initialDelaySeconds: 60
+            periodSeconds: 10
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { memory: 512Mi }
+          volumeMounts: [{ name: data, mountPath: /var/lib/pgsql/data }]
+      volumes:
+        - name: data
+          persistentVolumeClaim: { claimName: postgresql-data }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgresql
+  labels: { app: shackboard, tier: database }
+spec:
+  selector: { name: postgresql }
+  ports: [{ name: postgresql, port: 5432, targetPort: 5432 }]

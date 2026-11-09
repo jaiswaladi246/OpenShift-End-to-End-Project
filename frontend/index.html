@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ShackBoard · DevOps Shack on OpenShift</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <span class="logo">DS</span>
+      <div>
+        <h1>ShackBoard</h1>
+        <p>A 3-tier app running on Red Hat OpenShift · DevOps Shack</p>
+      </div>
+    </div>
+    <div class="tiers">
+      <span class="tier">Frontend · nginx</span>
+      <span class="arrow">→</span>
+      <span class="tier">Backend · Python</span>
+      <span class="arrow">→</span>
+      <span class="tier">Database · PostgreSQL</span>
+    </div>
+  </header>
+
+  <main>
+    <form id="new-task">
+      <input id="title" maxlength="200" placeholder="Add a task, e.g. Set up a BuildConfig webhook" autocomplete="off" required>
+      <button type="submit">Add task</button>
+    </form>
+
+    <section class="board">
+      <div class="column" data-status="todo"><h2>To do <span class="count"></span></h2><ul></ul></div>
+      <div class="column" data-status="doing"><h2>In progress <span class="count"></span></h2><ul></ul></div>
+      <div class="column" data-status="done"><h2>Done <span class="count"></span></h2><ul></ul></div>
+    </section>
+  </main>
+
+  <footer id="info">Connecting to the backend…</footer>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,83 @@
+# Backend: OpenShift builds the image from Git with Source-to-Image (no Dockerfile needed),
+# stores it in an ImageStream, and redeploys automatically whenever a new image is built.
+apiVersion: image.openshift.io/v1
+kind: ImageStream
+metadata:
+  name: backend
+  labels: { app: shackboard, tier: backend }
+---
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: backend
+  labels: { app: shackboard, tier: backend }
+spec:
+  source:
+    type: Git
+    git: { uri: https://github.com/jaiswaladi246/OpenShift-End-to-End-Project.git, ref: main }
+    contextDir: backend
+    # Private repo? Create a secret with a GitHub token and uncomment:
+    # sourceSecret: { name: github-token }
+  strategy:
+    type: Source
+    sourceStrategy:
+      from: { kind: ImageStreamTag, namespace: openshift, name: "python:latest" }
+  output:
+    to: { kind: ImageStreamTag, name: "backend:latest" }
+  triggers:
+    - type: ConfigChange
+    - type: ImageChange
+    - type: GitHub
+      github: { secretReference: { name: backend-webhook } }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  labels:
+    app: shackboard
+    tier: backend
+    app.kubernetes.io/part-of: shackboard
+    app.openshift.io/runtime: python
+  annotations:
+    # Tells OpenShift: when backend:latest changes, update this Deployment's image.
+    image.openshift.io/triggers: '[{"from":{"kind":"ImageStreamTag","name":"backend:latest"},"fieldPath":"spec.template.spec.containers[?(@.name==\"backend\")].image"}]'
+    app.openshift.io/connects-to: '[{"apiVersion":"apps/v1","kind":"Deployment","name":"postgresql"}]'
+spec:
+  replicas: 2
+  selector: { matchLabels: { name: backend } }
+  template:
+    metadata: { labels: { name: backend, app: shackboard, tier: backend } }
+    spec:
+      containers:
+        - name: backend
+          image: backend:latest
+          ports: [{ containerPort: 8080 }]
+          env:
+            - { name: APP_VERSION, value: v1 }
+            - { name: DB_HOST, value: postgresql }
+            - name: DB_USER
+              valueFrom: { secretKeyRef: { name: shackboard-db, key: database-user } }
+            - name: DB_PASSWORD
+              valueFrom: { secretKeyRef: { name: shackboard-db, key: database-password } }
+            - name: DB_NAME
+              valueFrom: { secretKeyRef: { name: shackboard-db, key: database-name } }
+          readinessProbe:
+            httpGet: { path: /readyz, port: 8080 }
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /healthz, port: 8080 }
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { memory: 384Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  labels: { app: shackboard, tier: backend }
+spec:
+  selector: { name: backend }
+  ports: [{ name: http, port: 8080, targetPort: 8080 }]
